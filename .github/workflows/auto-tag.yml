@@ -5,22 +5,21 @@ on:
     branches: [main]
 
 jobs:
-  tag:
+  tag-and-publish:
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       contents: write
-    outputs:
-      created: ${{ steps.create.outputs.created }}
-      version: ${{ steps.version.outputs.version }}
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: version
         run: |
           v=$(awk -F'"' '/^version = /{print $2; exit}' pyproject.toml)
           echo "version=$v" >> "$GITHUB_OUTPUT"
-      - id: create
+      - id: tag
         run: |
           tag="v${{ steps.version.outputs.version }}"
           if git rev-parse "$tag" >/dev/null 2>&1; then
@@ -33,11 +32,11 @@ jobs:
           git tag "$tag"
           git push origin "$tag"
           echo "created=true" >> "$GITHUB_OUTPUT"
-
-  release:
-    needs: tag
-    if: needs.tag.outputs.created == 'true'
-    uses: ./.github/workflows/release.yml
-    permissions:
-      id-token: write
-      contents: read
+      - if: steps.tag.outputs.created == 'true'
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - if: steps.tag.outputs.created == 'true'
+        run: uv build
+      - if: steps.tag.outputs.created == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
